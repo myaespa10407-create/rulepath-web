@@ -8,7 +8,7 @@ export async function askDify(d: FormData): Promise<string> {
   const byBlock = new Map<string, { name: string; max: number | null; total: number }>()
   for (const m of d.monDaChon) {
     for (const b of m.blocks) {
-      if (b.requirement !== 'TC') continue
+      if (b.requirement !== 'TC' || b.block_code === 'I') continue
       const cur = byBlock.get(b.block_code) ?? { name: b.block_name_vi, max: b.max_credits, total: 0 }
       cur.total += m.credits
       byBlock.set(b.block_code, cur)

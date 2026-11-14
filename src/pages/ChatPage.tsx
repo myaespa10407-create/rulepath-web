@@ -1,3 +1,4 @@
+import remarkGfm from 'remark-gfm'
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { askDify } from '../services/askDify'
@@ -73,7 +74,7 @@ export default function ChatPage({ data, onEdit }: Props) {
       <div className="messages">
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
-            {m.role === 'bot' ? <ReactMarkdown>{m.text}</ReactMarkdown> : m.text}
+            {m.role === 'bot' ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown> : m.text}
           </div>
         ))}
       </div>
