@@ -25,11 +25,18 @@ export default function ChatPage({ data, onEdit }: Props) {
     let alive = true
     setThinking(true)
     setFb(null)
-    askDify(data).then(text => {
-      if (!alive) return
-      setMsgs([{ role: 'bot', text }])
-      setThinking(false)
-    })
+    askDify(data)
+      .then(text => {
+        if (!alive) return
+        setMsgs([{ role: 'bot', text }])
+      })
+      .catch((e: Error) => {
+        if (!alive) return
+        setMsgs([{ role: 'bot', text: `Không kết nối được hệ thống hỏi đáp: ${e.message}` }])
+      })
+      .finally(() => {
+        if (alive) setThinking(false)
+      })
     return () => {
       alive = false
     }

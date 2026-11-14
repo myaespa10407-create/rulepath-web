@@ -1,58 +1,57 @@
 import type { FormData } from '../types'
 
-// Tín theo khối là dữ liệu thật; phần kết luận là mẫu – sau này thay bằng Dify
-export async function askDify(d: FormData): Promise<string> {
-  await new Promise(resolve => setTimeout(resolve, 1500))
+const labels: Record<string, string> = {
+  b2: 'Học phần B2',
+  'tin-chi': 'Số tín tự chọn',
+  'kiem-tra': 'Kiểm tra lớp',
+}
 
-  // Cộng tín theo từng khối TC
-  const byBlock = new Map<string, { name: string; max: number | null; total: number }>()
+// Gom tín theo khối TC (khối I không tính B2)
+function blockTotals(d: FormData) {
+  const map = new Map<string, { name: string; max: number | null; total: number }>()
   for (const m of d.monDaChon) {
     for (const b of m.blocks) {
       if (b.requirement !== 'TC' || b.block_code === 'I') continue
-      const cur = byBlock.get(b.block_code) ?? { name: b.block_name_vi, max: b.max_credits, total: 0 }
+      const cur = map.get(b.block_code) ?? { name: b.block_name_vi, max: b.max_credits, total: 0 }
       cur.total += m.credits
-      byBlock.set(b.block_code, cur)
+      map.set(b.block_code, cur)
     }
   }
+  return [...map.entries()].map(([code, v]) => ({
+    block_code: code,
+    block_name: v.name,
+    total: v.total,
+    max: v.max,
+    over: v.max !== null && v.total > v.max,
+  }))
+}
 
-  const overs = [...byBlock.entries()].filter(([, v]) => v.max !== null && v.total > v.max)
+export async function askDify(d: FormData): Promise<string> {
+  const totals = blockTotals(d)
+  const mon = d.monDaChon.map(m => ({
+    course_code: m.course_code,
+    name: m.name_vi,
+    credits: m.credits,
+    class_code: m.class_code,
+    language: m.language,
+  }))
 
-  const header = '| Khối | Tín đã chọn | Giới hạn | Trạng thái |\n|---|---|---|---|'
-  const rows = [...byBlock.entries()].map(([code, v]) => {
-    const status = v.max !== null && v.total > v.max ? `Vượt ${v.total - v.max} TC` : 'Trong giới hạn'
-    return `| ${code} – ${v.name} | ${v.total} | ${v.max ?? '-'} | ${status} |`
+  const res = await fetch('/api/ask-dify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: `Năm ${d.namHoc}, ${d.hocKy} 2026-2027, tình huống: ${labels[d.tinhHuong] ?? ''}. ${d.cauHoi}`,
+      inputs: {
+        nam_hoc: d.namHoc,
+        hoc_ky: d.hocKy,
+        tinh_huong: labels[d.tinhHuong] ?? '',
+        mon_da_chon: JSON.stringify(mon),
+        tong_tin_theo_khoi: JSON.stringify(totals),
+      },
+    }),
   })
-  const table = rows.length ? `${header}\n${rows.join('\n')}` : `${header}\n| - | 0 | - | Chưa chọn học phần tự chọn |`
 
-  const warnings = overs.length
-    ? overs.map(([code, v]) => `- **Nghiêm trọng:** khối ${code} vượt ${v.total - (v.max ?? 0)} TC.`).join('\n')
-    : '- Không có khối nào vượt giới hạn.'
-
-  const list = d.monDaChon.length
-    ? d.monDaChon
-        .map(m => `- ${m.course_code} ${m.name_vi} (${m.credits} TC, lớp ${m.class_code}, ${m.language ?? 'chưa rõ ngôn ngữ'})`)
-        .join('\n')
-    : '- Chưa chọn học phần'
-
-  const conclusion = overs.length
-    ? `Bạn đang vượt giới hạn tín chỉ ở ${overs.length} khối. Cần bỏ bớt học phần trước khi đăng ký.`
-    : 'Các khối đang trong giới hạn tín chỉ. Vẫn cần đối chiếu cổng đăng ký chính thức.'
-
-  return `**Kết luận:** ${conclusion}
-
-**Chi tiết theo khối:**
-
-${table}
-
-**Cảnh báo:**
-${warnings}
-
-**Hệ quả:** Học phí và GPA sẽ được tính khi có dữ liệu thật.
-
-**Việc cần làm:**
-${list}
-
-**Nguồn:** [CTĐT NNA – mục III.2]
-
-Kết quả mang tính tham khảo, cần đối chiếu cổng đăng ký chính thức.`
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error ?? 'Lỗi khi gọi Dify')
+  return data.answer as string
 }
